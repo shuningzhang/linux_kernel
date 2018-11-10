@@ -1,12 +1,3 @@
-
-#ifndef __KERNEL__
-    #define __KERNEL__
-#endif
-
-#ifndef MODULE
-    #define MODULE
-#endif
-
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
