@@ -1,6 +1,5 @@
 
-obj-m += server.o
-obj-m += client.o
+obj-m += multhread.o
 CURRENT_PATH := $(shell pwd)
 LINUX_KERNEL := $(shell uname -r)
 LINUX_KERNEL_PATH := /lib/modules/$(LINUX_KERNEL)/build

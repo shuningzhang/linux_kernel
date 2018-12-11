@@ -7,11 +7,10 @@
 #include <linux/inet.h>
 #include <linux/socket.h>
 #include <net/sock.h>
+#include <linux/kthread.h>
 
-static void listen_data_ready(struct sock *sock)
-{
-	printk("Just for listen ready!\n");
-}
+#define BUF_SIZE 1024
+struct task_struct *accept_task;
 
 int server_init(void)
 {
@@ -30,35 +29,20 @@ int server_init(void)
 	s_addr.sin_port = htons(port);
 	s_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	sock = (struct socket*)kmalloc(sizeof(struct socket), GFP_KERNEL);
-	if (NULL == sock){
-		printk("malloc failed for sock!\n");
-		goto out;
-	}
-
-	/*
-	 * client_sock = (struct socket*)kmalloc(sizeof(struct socket), GFP_KERNEL);
-	if (NULL == client_sock) {
-		printk("malloc failed for sock2!\n");
-		goto failed2;
-	}*/
 
 	ret = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
 	if (ret) {
 		printk("create socket error!\n");
-		goto failed1;
+		goto out;
 	}
 
 
 	ret = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &client_sock);
 	if (ret < 0) {
 		printk("create client socket error!\n");
-		goto failed1;
+		goto failed2;
 	}
 
-	write_lock_bh(&sock->sk->sk_callback_lock);
-	//sock->sk->sk_data_ready = listen_data_ready;
-	write_unlock_bh(&sock->sk->sk_callback_lock);
 
 	ret = sock->ops->bind(sock, (struct sockaddr *)&s_addr, sizeof(struct sockaddr_in));
 	if (ret) {
@@ -78,46 +62,67 @@ int server_init(void)
 		goto failed1;
 	}
 	
-	data_buffer = kmalloc(1024, GFP_KERNEL);
+	data_buffer = kmalloc(BUF_SIZE, GFP_KERNEL);
 	if (NULL == data_buffer) {
 		printk("alloc failed!\n");
 		goto failed1;
 	}
 
-	memset(data_buffer, 0, 1024);
+	memset(data_buffer, 0, BUF_SIZE);
 
 
 	memset(&vec, 0, sizeof(struct kvec));
 	memset(&msg, 0, sizeof(struct msghdr));
 	vec.iov_base = data_buffer;
-	vec.iov_len = 1024;
+	vec.iov_len = BUF_SIZE;
 	//msg.msg_flags = MSG_WAITALL | MSG_NOSIGNAL;
 
-	ret = kernel_recvmsg(client_sock, &msg, &vec, 1, 1024, 0);
+	ret = kernel_recvmsg(client_sock, &msg, &vec, 1, BUF_SIZE, 0);
 	printk("recv: %s\n", data_buffer);
 		
-	sock_release(sock);
-	sock_release(client_sock);
-
 failed1:
-	kfree(client_sock);
+	sock_release(client_sock);
 failed2:
-	kfree(sock);
+	sock_release(sock);
 out:
+	kfree(data_buffer);
 	return ret;
 
 }
 
+static int socket_accept_server(void *data)
+{
+
+	while (!kthread_should_stop()) {
+		server_init();	
+		
+	}
+
+	return 0;
+}
+
+
 static int socket_init(void)
 {
+	ssize_t ret = 0;
+
 	printk("Hello, socket \n");
-	server_init();
-	return 0;
+	accept_task = kthread_run(socket_accept_server,
+				  NULL,
+				  "accept_server");
+	if (IS_ERR(accept_task)) {
+		ret = PTR_ERR(accept_task);
+		goto failed;
+	}
+
+failed:
+	return ret;
 }
 
 static void socket_exit(void)
 {
 	printk("Bye!\n");
+	kthread_stop(accept_task);
 
 }
 
