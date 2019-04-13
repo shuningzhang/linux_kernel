@@ -13,17 +13,24 @@
 #define BUF_SIZE 1024
 struct task_struct *main_task;
 
+/* 这个函数用于将内核线程置于休眠状态，也就是将其调度出
+ * 队列。*/
 static inline void sleep(unsigned sec)
 {
 	__set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout(sec * HZ);
 }
 
+/* 线程函数， 这个是线程执行的主体 */
 static int multhread_server(void *data)
 {
+	int index = 0;
 
+	/* 在线程没有被停止的情况下，循环向系统日志输出
+	 * 内容， 完成后休眠1秒。*/
 	while (!kthread_should_stop()) {
-		printk(KERN_NOTICE "thread run\n");
+		printk(KERN_NOTICE "thread run %d\n", index);
+		index ++;
 		sleep(1);
 	}
 
@@ -35,7 +42,9 @@ static int multhread_init(void)
 {
 	ssize_t ret = 0;
 
-	printk("Hello, socket \n");
+	printk("Hello, thread! \n");
+	/* 创建并启动一个内核线程， 这里参数为线程函数，
+	 * 函数的参数（NULL）,和线程名称。 */
 	main_task = kthread_run(multhread_server,
 				  NULL,
 				  "multhread_server");
@@ -50,7 +59,8 @@ failed:
 
 static void multhread_exit(void)
 {
-	printk("Bye!\n");
+	printk("Bye thread!\n");
+	/* 停止线程 */
 	kthread_stop(main_task);
 
 }
